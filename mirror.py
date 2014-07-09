@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # Copyright 2008 Brett Slatkin
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -27,7 +27,7 @@ import wsgiref.handlers
 from google.appengine.api import memcache
 from google.appengine.api import urlfetch
 from google.appengine.ext import db
-from google.appengine.ext import webapp
+import webapp2
 from google.appengine.ext.webapp import template
 from google.appengine.runtime import apiproxy_errors
 
@@ -67,15 +67,6 @@ TRANSFORMED_CONTENT_TYPES = frozenset([
   "text/css",
 ])
 
-MIRROR_HOSTS = frozenset([
-  'mirrorr.com',
-  'mirrorrr.com',
-  'www.mirrorr.com',
-  'www.mirrorrr.com',
-  'www1.mirrorrr.com',
-  'www2.mirrorrr.com',
-  'www3.mirrorrr.com',
-])
 
 MAX_CONTENT_SIZE = 10 ** 6
 
@@ -113,23 +104,18 @@ class MirroredContent(object):
   @staticmethod
   def fetch_and_store(key_name, base_url, translated_address, mirrored_url):
     """Fetch and cache a page.
-    
+
     Args:
       key_name: Hash to use to store the cached page.
       base_url: The hostname of the page that's being mirrored.
       translated_address: The URL of the mirrored page on this site.
       mirrored_url: The URL of the original page. Hostname should match
         the base_url.
-    
+
     Returns:
       A new MirroredContent object, if the page was successfully retrieved.
       None if any errors occurred or the content could not be retrieved.
     """
-    # Check for the X-Mirrorrr header to ignore potential loops.
-    if base_url in MIRROR_HOSTS:
-      logging.warning('Encountered recursive request for "%s"; ignoring',
-                      mirrored_url)
-      return None
 
     logging.debug("Fetching '%s'", mirrored_url)
     try:
@@ -168,12 +154,12 @@ class MirroredContent(object):
     if not memcache.add(key_name, new_content, time=EXPIRATION_DELTA_SECONDS):
       logging.error('memcache.add failed: key_name = "%s", '
                     'original_url = "%s"', key_name, mirrored_url)
-      
+
     return new_content
 
 ################################################################################
 
-class BaseHandler(webapp.RequestHandler):
+class BaseHandler(webapp2.RequestHandler):
   def get_relative_url(self):
     slash = self.request.url.find("/", len(self.request.scheme + "://"))
     if slash == -1:
@@ -223,7 +209,7 @@ class HomeHandler(BaseHandler):
 class MirrorHandler(BaseHandler):
   def get(self, base_url):
     assert base_url
-    
+
     # Log the user-agent and referrer, to see who is linking to us.
     logging.debug('User-Agent = "%s", Referrer = "%s"',
                   self.request.user_agent,
@@ -268,7 +254,7 @@ class MirrorHandler(BaseHandler):
           entry_point.put()
         except (db.Error, apiproxy_errors.Error):
           logging.exception("Could not insert EntryPoint")
-    
+
     for key, value in content.headers.iteritems():
       self.response.headers[key] = value
     if not DEBUG:
@@ -277,17 +263,8 @@ class MirrorHandler(BaseHandler):
 
     self.response.out.write(content.data)
 
-
-app = webapp.WSGIApplication([
+app = webapp2.WSGIApplication([
   (r"/", HomeHandler),
   (r"/main", HomeHandler),
   (r"/([^/]+).*", MirrorHandler)
 ], debug=DEBUG)
-
-
-def main():
-  wsgiref.handlers.CGIHandler().run(app)
-
-
-if __name__ == "__main__":
-  main()
